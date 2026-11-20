@@ -53,7 +53,7 @@ root.innerHTML = `
           <div id="saved-unlock-field" hidden><label for="saved-unlock-password">系统锁屏密码</label><input id="saved-unlock-password" type="password" autocomplete="off" maxlength="256"></div>
         </details>
         <details id="advanced"><summary>高级设置</summary>
-          <label for="server">服务器</label><input id="server" value="api.crossdesk.cn" autocomplete="off">
+          <label for="server">服务器</label><input id="server" value="" placeholder="自建服务器地址" autocomplete="off">
           <div class="row"><div><label for="port">端口</label><input id="port" type="number" min="1" max="65535" value="9099"></div><div><label for="display">显示器索引</label><input id="display" type="number" min="0" max="63" value="0"></div></div>
         </details>
       </fieldset>

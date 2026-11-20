@@ -42,15 +42,7 @@ final class RemoteVersionCheck {
     private void check() {
         if (!connected || !receivedHostInfo || attempted) return;
         attempted = true;
-        // iOS treats missing/invalid peer versions as legacy, without a request.
-        if (version.isEmpty()) { notify.run(); return; }
-        long currentGeneration = generation;
-        String currentVersion = version;
-        request = fetcher.fetch(data -> {
-            if (generation != currentGeneration || !connected) return;
-            request = null;
-            if (data != null && NativeSession.nHasAppUpdate(currentVersion, data)) notify.run();
-        });
+        // LAN-only build: the public release manifest is never fetched.
     }
 
     void reset() {

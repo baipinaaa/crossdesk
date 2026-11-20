@@ -44,20 +44,8 @@ final class AppUpdateChecker {
 
     void checkNow() {
         if (!enabled || status == Status.CHECKING) return;
-        status = Status.CHECKING;
+        // LAN-only build: the public release manifest is never fetched.
+        status = updateAvailable() ? Status.AVAILABLE : Status.UP_TO_DATE;
         changed.run();
-        long token = ++generation;
-        request = fetcher.fetch(data -> {
-            if (!enabled || token != generation) return;
-            request = null;
-            String result = data == null ? null : compare.apply(currentVersion, data);
-            if (result == null) {
-                status = Status.FAILED;
-            } else {
-                availableVersion = result;
-                status = updateAvailable() ? Status.AVAILABLE : Status.UP_TO_DATE;
-            }
-            changed.run();
-        });
     }
 }

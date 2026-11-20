@@ -180,13 +180,10 @@ final class AppUpdateChecker: ObservableObject {
     }
 
     static func lookupURL(appStoreID: String, country: String) -> URL? {
-        guard let identifier = numericAppID(appStoreID),
-              country.utf8.count == 2, country.utf8.allSatisfy({ (97...122).contains($0) }) else { return nil }
-        var url = URLComponents(string: "https://itunes.apple.com/lookup")!
-        url.queryItems = [URLQueryItem(name: "id", value: String(identifier)),
-                          URLQueryItem(name: "country", value: country),
-                          URLQueryItem(name: "entity", value: "software")]
-        return url.url
+        // LAN-only build: the App Store lookup endpoint is never contacted.
+        _ = appStoreID
+        _ = country
+        return nil
     }
 
     // Only the public app ID and storefront region are sent; no installed version or credentials.

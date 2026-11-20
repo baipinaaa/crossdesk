@@ -42,7 +42,8 @@ std::string LinuxUpdateDownloadUrl(const nlohmann::json& manifest,
     }
     const std::string filename = package_name + "-linux-" + architecture +
                                  "-v" + latest.version + ".deb";
-    const std::string url = "https://downloads.crossdesk.cn/" + filename;
+    // LAN-only build: the release download origin is disabled.
+    const std::string url;
     // Verify the variant in the asset name too, not just the manifest key.
     if (download.at("filename") == filename && download.at("url") == url) {
       return url;

@@ -107,6 +107,10 @@ void ConfigureLinuxCaCerts(httplib::Client* cli) {
 }  // namespace
 
 std::optional<VersionInfo> CheckUpdate() {
+  // LAN-only build: version.crossdesk.cn is never contacted. Checking for
+  // updates requires a public release manifest, which no longer applies.
+  return std::nullopt;
+#if 0
   httplib::Client cli("https://version.crossdesk.cn");
 
   cli.set_connection_timeout(5);
@@ -177,6 +181,7 @@ std::optional<VersionInfo> CheckUpdate() {
     LogHttpError(res);
     return std::nullopt;
   }
+#endif
 }
 
 }  // namespace crossdesk

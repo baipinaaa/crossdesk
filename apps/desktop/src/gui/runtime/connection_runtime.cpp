@@ -638,6 +638,16 @@ std::shared_ptr<GuiRuntime::RemoteSession> GuiRuntime::FindRemoteSession(
 int GuiRuntime::ConnectTo(const std::string& remote_id, const char* password,
                           bool remember_password, bool bypass_presence_check,
                           bool background) {
+  // LAN-only build: device-id sessions are brokered by the signaling server,
+  // which is never contacted. All callers (UI, recent connections, presence
+  // probes, automation, deferred rejoins) therefore fail fast here.
+  (void)remote_id;
+  (void)password;
+  (void)remember_password;
+  (void)bypass_presence_check;
+  (void)background;
+  return -1;
+#if 0
   // Do not recreate a failed peer or send another probe during a server cooldown.
   if (const auto current = FindRemoteSession(remote_id);
       current && current->connection_auth_.Get().retry_after > 0) {
@@ -807,5 +817,6 @@ int GuiRuntime::ConnectTo(const std::string& remote_id, const char* password,
   }
 
   return 0;
+#endif
 }
 }  // namespace crossdesk

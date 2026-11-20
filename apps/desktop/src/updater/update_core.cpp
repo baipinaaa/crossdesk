@@ -22,7 +22,7 @@
 namespace crossdesk::updater {
 namespace {
 constexpr std::uint64_t kMaxPackageSize = 2ULL * 1024 * 1024 * 1024;
-constexpr const char* kDownloadOrigin = "https://downloads.crossdesk.cn";
+constexpr const char* kDownloadOrigin = "";
 
 std::string Hex(const unsigned char* data, std::size_t length) {
   constexpr char digits[] = "0123456789abcdef";
@@ -147,7 +147,7 @@ std::string DownloadUrl(const std::string& manifest, const std::string& platform
     if (download.at("version") == version && download.at("filename") == filename &&
         download.at("url") == url) return url;
   } catch (const std::exception&) {}
-  return "https://crossdesk.cn";
+  return "";
 }
 
 std::string SignedDownload(const std::string& manifest, const std::string& platform) {
@@ -186,6 +186,14 @@ void VerifyPackage(const fs::path& file, const Artifact& artifact) {
 
 void DownloadPackage(const Artifact& artifact, const fs::path& destination,
                      std::atomic<int>& progress, const std::atomic<bool>& cancel) {
+  // LAN-only build: no download origin is configured, so remote packages can
+  // never be fetched.
+  (void)artifact;
+  (void)destination;
+  (void)progress;
+  (void)cancel;
+  throw std::runtime_error("Update downloads are disabled");
+#if 0
   httplib::Client client(kDownloadOrigin);
   client.set_connection_timeout(10);
   client.set_read_timeout(30);
@@ -215,6 +223,7 @@ void DownloadPackage(const Artifact& artifact, const fs::path& destination,
   if (!response || response->status != 200 || !file || received != artifact.size || cancel.load())
     throw std::runtime_error(cancel.load() ? "Update cancelled" : "Update download failed");
   VerifyPackage(destination, artifact);
+#endif
 }
 
 void CopyPackage(const fs::path& source, const fs::path& destination, const Artifact& artifact) {

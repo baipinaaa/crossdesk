@@ -183,16 +183,8 @@ export class MobilePlatform {
     finally { if (generation === this.generation) this.setChoosing(false); }
   }
   async version(): Promise<string | undefined> {
-    const request = http.createHttp(); this.requests.push(request);
-    try {
-      const response = await request.request('https://version.crossdesk.cn/version.json', {
-        method: http.RequestMethod.GET, connectTimeout: 15000, readTimeout: 15000,
-        expectDataType: http.HttpDataType.STRING, usingCache: false, maxLimit: 256 * 1024
-      });
-      if (response.responseCode !== 200 || typeof response.result !== 'string' || response.result.length > 256 * 1024) return undefined;
-      return response.result;
-    } catch { return undefined; }
-    finally { this.requests = this.requests.filter((r: http.HttpRequest) => r !== request); request.destroy(); }
+    // LAN-only build: the public release manifest is never fetched.
+    return undefined;
   }
   cancelRequests(): void { for (const request of this.requests) request.destroy(); this.requests = []; }
   openLink(url: string): void {

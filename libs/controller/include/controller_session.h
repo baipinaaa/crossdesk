@@ -54,7 +54,8 @@ private:
   uint64_t generation_ = 0, received_ = 0, dropped_ = 0, invalid_ = 0;
 };
 struct SessionOptions {
-  std::string host = "api.crossdesk.cn", log_directory;
+  // LAN-only build: callers must supply an explicit host.
+  std::string host, log_directory;
   int port = 9099, display = 0, fps = 8;
   int preview_width = 1920, preview_height = 1080;
   int quality = 2, max_bitrate_bps = 6000000;

@@ -597,7 +597,9 @@ int ConfigCenter::SetTrustedDevicesOnly(bool enabled) {
   trusted_devices_only_.store(enabled);
   return 0;
 }
-bool ConfigCenter::IsTrustedDevicesOnly() const { return trusted_devices_only_.load(); }
+// LAN-only build: the trusted-device allow-list is disabled entirely, so the
+// persisted switch is never consulted.
+bool ConfigCenter::IsTrustedDevicesOnly() const { return false; }
 
 int ConfigCenter::SetLockOnDisconnect(bool enabled) {
   if (StoreValues({{"lock_on_disconnect", enabled ? "true" : "false"}}) != 0)

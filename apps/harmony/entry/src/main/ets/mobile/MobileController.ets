@@ -46,7 +46,7 @@ export class MobileState {
   privacyAvailable: boolean = false;
   modal: string = '';
   notice: string = '';
-  server: string = 'api.crossdesk.cn';
+  server: string = '';
   port: string = '9099';
   remote: string = '';
   password: string = '';
@@ -150,7 +150,7 @@ export class MobileController {
     this.context = context; this.store = new MobileStore(context);
     this.resolutionStore = new RemoteResolutionStore((key: string) => this.store.text(key, '[]'),
       (key: string, value: string) => this.store.put(key, value));
-    this.state.consent = this.store.flag('consent'); this.state.server = this.store.text('server', 'api.crossdesk.cn');
+    this.state.consent = this.store.flag('consent'); this.state.server = this.store.text('server', '');
     this.state.port = this.store.text('port', '9099'); this.state.remote = this.store.text('lastRemote');
     this.state.relative = this.store.flag('relative', true); this.state.videoPreference = this.store.number('videoPreference', 1);
     this.state.autoLandscape = this.store.flag('autoLandscape', false);

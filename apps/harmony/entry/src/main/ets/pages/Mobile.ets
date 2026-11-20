@@ -56,7 +56,7 @@ struct Mobile {
   private navigate(page: string): void {
     if (page === 'settings') {
       this.editingServer = this.state.server; this.editingPort = this.state.port;
-      this.customServer = this.state.server !== 'api.crossdesk.cn' || this.state.port !== '9099';
+      this.customServer = this.state.server !== '' || this.state.port !== 9099;
       this.previewToggle = this.state.previews;
     }
     this.getUIContext().animateTo({ duration: 200, curve: Curve.EaseInOut }, () => this.controller?.navigate(page));
@@ -288,7 +288,7 @@ struct Mobile {
             Text(tr("使用自定义服务器")).fontSize(16).fontColor(MobileTheme.ink).layoutWeight(1)
             Toggle({ type: ToggleType.Switch, isOn: this.customServer }).selectedColor(MobileTheme.green).onChange((value: boolean) => {
               this.customServer = value;
-              if (!value) { this.editingServer = 'api.crossdesk.cn'; this.editingPort = '9099'; this.controller?.saveSettings(this.editingServer, this.editingPort); }
+              if (!value) { this.editingServer = ''; this.editingPort = '9099'; this.controller?.saveSettings(this.editingServer, this.editingPort); }
             }).accessibilityText(tr("使用自定义服务器"))
           }.padding({ left: 16, right: 16, top: 8, bottom: 8 }).width('100%')
           if (this.customServer) {
@@ -348,7 +348,7 @@ struct Mobile {
     Column() {
       Column() {
         this.ValueRow(tr("版本"), this.state.version)
-        if (this.state.update) { this.Rule(); this.SettingRow(tr("新版本可用"), `v${this.state.update}`, () => this.controller?.platform.openLink('https://crossdesk.cn')) }
+        if (this.state.update) { this.Rule(); this.SettingRow(tr("新版本可用"), `v${this.state.update}`, () => {}) }
         if (this.state.updateStatus) { this.Footer(this.state.updateStatus) }
         this.Rule()
         this.Action(tr("检查更新"), () => this.controller?.checkLocal(true))

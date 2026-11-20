@@ -1205,7 +1205,9 @@ int GuiApplication::Run() {
     if (!PrepareSharedGuiIdentity(true)) return -1;
   }
 #endif
-  InitializeTrustedDevices(path_manager_->GetConfigPath() / "trusted-devices");
+  // LAN-only build: trusted-device pairing is disabled together with the
+  // signaling identity it depends on.
+  // InitializeTrustedDevices(path_manager_->GetConfigPath() / "trusted-devices");
 #ifdef __APPLE__
   StartMacPermissionMigration(false);
 #endif
@@ -1367,7 +1369,8 @@ void GuiApplication::InitializeModules() {
   // Initialize it after Run() has selected the application's log directory.
   video_renderer_ = CreateVideoRenderer();
   devices_.Initialize();
-  CreateConnectionPeer();
+  // LAN-only build: signaling peer creation is disabled. See
+  // GuiRuntime::CreateConnectionPeer().
   modules_inited_ = true;
 }
 
@@ -1408,13 +1411,11 @@ void GuiApplication::InitializeUi() {
   ui_ = std::make_unique<SlintUi>();
   for (const auto& window : {ui_->main, ui_->wall})
     window->set_ip_direct_enabled(config_center_->IsIpDirectEnabled());
-  ui_->main->set_lan_mode(config_center_->GetConnectionMode() ==
-                          ConfigCenter::CONNECTION_MODE::DIRECT_IP);
+  // LAN-only build: the UI has no mode switch and always shows direct LAN.
+  ui_->main->set_lan_mode(true);
 #if _WIN32
   ui_->session_end.Start();
 #endif
-  ui_->sponsorship_prompt_pending =
-      config_center_->GetSponsorshipPromptDismissedVersion() != CROSSDESK_VERSION;
   ui_->video_presenter =
       std::make_unique<SlintVideoPresenter>(*video_renderer_);
 #if defined(__APPLE__)
@@ -1827,10 +1828,8 @@ void GuiApplication::BindMainCallbacks(bool gallery_window) {
     return true;
   });
   main->on_signal_reconnect_requested([this] {
-    LOG_INFO("Signal reconnect requested from the status bar");
-    if (ForceSignalReconnect() != 0) {
-      LOG_WARN("Signal reconnect could not be started");
-    }
+    // LAN-only build: there is no signaling server to reconnect to.
+    (void)this;
   });
   main->on_toggle_password_visibility([this, main] {
     show_password_ = !show_password_;
@@ -1838,7 +1837,7 @@ void GuiApplication::BindMainCallbacks(bool gallery_window) {
   });
   main->on_reset_password([this, main](slint::SharedString value) {
     const std::string password(value);
-    if (!main->get_lan_mode()) return RequestPasswordChange(password);
+    if (!main->get_lan_mode()) return false;
     if (!lan::ValidPassword(password)) return false;
     if (!LanAvailable()) return true;  // The initialization error is shown on the main view.
     try {
@@ -2015,7 +2014,8 @@ void GuiApplication::BindMainCallbacks(bool gallery_window) {
       main->set_file_save_path(folder);
     }
   });
-  BindTrustedDeviceCallbacks(gallery_window);
+  // LAN-only build: trusted-device pairing UI is removed.
+  (void)gallery_window;
   main->on_save_settings([this, main] {
     return SaveSettingsFromUi(main->get_gallery_mode());
   });
@@ -2038,79 +2038,23 @@ void GuiApplication::BindMainCallbacks(bool gallery_window) {
                                    ? UiText(std::to_string(signal_port))
                                    : slint::SharedString{});
   });
-  main->on_cancel_update([this] {
-#if CROSSDESK_HAS_UPDATER
-    if (updater_ && updater_->busy()) updater_->Cancel();
-#endif
-  });
-  main->on_open_manual_download([this] {
-    const auto& latest = update_checker_->latest();
-    OpenUrl(latest && !latest->download_url.empty() ? latest->download_url
-                                                   : "https://crossdesk.cn");
-  });
-  main->on_open_download([this, main] {
-#if CROSSDESK_HAS_UPDATER
-    const auto& latest = update_checker_->latest();
-    if (updater_ && updater_->busy()) return;
-    if (updater_ && latest && updater_->Available(latest->update_envelope)) {
-      main->set_about_open(false);
-      main->set_update_open(true);
-      main->set_update_confirm_open(true);
-      return;
-    }
-#endif
-    main->invoke_open_manual_download();
-  });
-  main->on_confirm_update([this, main] {
-    if (!main->get_update_confirm_open()) return;
-    for (const auto& window : {ui_->main, ui_->wall})
-      window->set_update_confirm_open(false);
-#if CROSSDESK_HAS_UPDATER
-    const auto& latest = update_checker_->latest();
-    if (!updater_ || updater_->busy() || !latest ||
-        !updater_->Available(latest->update_envelope)) return;
-    updater_->Start(latest->update_envelope);
-    // Disable both windows immediately, before the next polling tick.
-    for (const auto& window : {ui_->main, ui_->wall}) {
-      window->set_update_install_busy(updater_->busy());
-      window->set_update_install_failed(
-          updater_->state() == updater::Controller::State::Failed);
-      window->set_update_install_status("");
-    }
-#endif
-  });
+  main->on_cancel_update([this] { (void)this; });
+  main->on_open_manual_download([this] { (void)this; });
+  main->on_open_download([this, main] { (void)this; (void)main; });
+  main->on_confirm_update([this, main] { (void)this; (void)main; });
   about::Populate(ui_->Window(gallery_window));
   main->on_open_about_link([this](slint::SharedString url) {
     const std::string link(url);
     if (link.starts_with("https://")) OpenUrl(link);
   });
-  main->on_open_website([this] { OpenUrl("https://crossdesk.cn"); });
+  main->on_open_website([this] { (void)this; });
   main->on_open_feedback_github([this, main] {
-    if (!OpenUrl("https://github.com/kunkundi/crossdesk/issues/new/choose")) {
-      main->set_feedback_succeeded(false);
-      main->set_feedback_status(UiText(localization::Literal(
-          "无法打开浏览器，请访问 GitHub 项目页面。", localization_language_index_)));
-    }
+    (void)this;
+    (void)main;
   });
   main->on_export_diagnostic_logs([this] { ExportDiagnosticLogs(); });
-  main->on_open_afdian_sponsor([this] {
-    OpenUrl("https://afdian.com/a/kunkundi");
-  });
-  main->on_open_github_sponsor([this] {
-    OpenUrl("https://github.com/sponsors/kunkundi");
-  });
-  main->on_open_kofi_sponsor([this] {
-    OpenUrl("https://ko-fi.com/kunkundi");
-  });
-  main->on_dismiss_sponsorship([this, main] {
-    main->set_sponsorship_open(false);
-    ui_->sponsorship_prompt_pending = false;
-    if (config_center_->SetSponsorshipPromptDismissedVersion(CROSSDESK_VERSION) != 0) {
-      LOG_WARN("Could not save sponsorship prompt dismissal");
-    }
-  });
   main->on_check_for_updates([this] {
-    update_checker_->RequestCheck();
+    (void)this;
     SyncMainWindow();
   });
   main->on_connection_cancel([this] {
@@ -2704,7 +2648,7 @@ void GuiApplication::Tick() {
                                 : lan_->ListenerError(display_address)));
     // Show failures one address at a time, without interrupting edits or another
     // dialog. A working listener must not clear another address's error.
-    if (ui_->main->get_lan_mode() && ui_->main->get_can_show_sponsorship() &&
+    if (ui_->main->get_lan_mode() &&
         !ui_->main->get_lan_port_editing() && !ui_->main->get_lan_port_dirty()) {
       if (auto issue = lan_->TakeListenerWarning()) {
         ui_->main->set_lan_access_warning_endpoint(
@@ -2717,14 +2661,10 @@ void GuiApplication::Tick() {
                                ? std::string("ConnectionFailed")
                                : lan_error_;
   ui_->main->set_lan_message(UiText(lan_message));
-  PollUpdateCheck();
+  // LAN-only build: the version checker, the updater, announcement polling and
+  // the signaling reconnect loop are all disabled. No outbound connection is
+  // made from Tick().
   HandleSessionCleanup();
-  HandlePasswordChangeResult();
-  HandleCredentialRecovery();
-  if (!peer_) {
-    signal_connection_indicator_.Reset();
-    CreateConnectionPeer();
-  }
 #if defined(__linux__) && !defined(__OHOS__)
   HeadlessConsole::Instance().Poll(
       signal_connected_.load(),
@@ -2828,23 +2768,15 @@ void GuiApplication::Tick() {
   SyncGallery();
   SyncConnectionDialog();
   SyncPlatformDialogs();
-  // Wait for startup notices and user interactions to finish. Once shown,
-  // never reopen it during this run, even if saving the dismissal fails.
-  if (ui_->sponsorship_prompt_pending &&
-      ui_->main->window().is_visible() &&
-      !ui_->main->window().is_minimized() &&
-      ui_->main->get_can_show_sponsorship() &&
-      !ui_->file_dialog_open && !HasActiveSession()) {
-    ui_->sponsorship_prompt_pending = false;
-    ui_->main->set_sponsorship_open(true);
-  }
+  // LAN-only build: the sponsorship prompt is removed.
+  ui_->sponsorship_prompt_pending = false;
   SyncStreamWindow();
   SyncVideoFrameGapStats();
 #if defined(__APPLE__)
   UpdateVideoFrameScheduler();
 #endif
   SyncServerWindow();
-  SyncTrustedDevices();
+  // LAN-only build: trusted devices are disabled.
   for (auto it = ui_->file_browsers.begin(); it != ui_->file_browsers.end();) {
     if (!it->second->Tick()) it = ui_->file_browsers.erase(it);
     else {
@@ -2863,6 +2795,10 @@ void GuiApplication::Tick() {
 }
 
 void GuiApplication::PollUpdateCheck() {
+  // LAN-only build: version checking and update installation are disabled, so
+  // version.crossdesk.cn and downloads.crossdesk.cn are never contacted.
+  return;
+#if 0
 #if CROSSDESK_HAS_UPDATER
   if (updater_) {
     // The event loop is running and initialization has completed.
@@ -2917,6 +2853,7 @@ void GuiApplication::PollUpdateCheck() {
     blocks.push_back(std::move(block));
   }
   ui_->release_note_blocks_model->set_vector(std::move(blocks));
+#endif
 }
 
 void GuiApplication::ShareLocalCursorState() {
@@ -3372,7 +3309,10 @@ void GuiApplication::UpdateLocalization() {
 }
 
 void GuiApplication::SyncAnnouncements() {
-  if (signal_connected_) {
+  // LAN-only build: announcements are delivered by the signaling server, which
+  // this build never contacts.
+  return;
+#if 0
     announcements_.Configure(params_.signal_server_ip,
                              params_.signal_server_port, client_id_);
   }
@@ -3437,6 +3377,7 @@ void GuiApplication::SyncAnnouncements() {
         std::make_shared<slint::VectorModel<ui::AnnouncementItem>>(
             std::move(rows)));
   }
+#endif
 }
 
 void GuiApplication::SyncMainWindow() {
@@ -5499,30 +5440,11 @@ void GuiApplication::ConnectFromUi(const std::string& input) {
       }
     return;
   }
-  const std::string remote_id = CompactPeerId(input);
-  if (!gallery::Workspace::ValidId(remote_id)) {
-    ui_->main->set_connection_input_error(
-        UiText(localization::Literal("请输入有效的 9 位设备 ID", localization_language_index_)));
-    return;
-  }
-  ui_->main->set_connection_input_error("");
-  if (auto existing = FindRemoteSession(remote_id);
-      existing && !existing->closing_ && existing->connection_established_) {
-    ReleaseControl();
-    existing->tab_opened_ = true;
-    focused_remote_id_ = remote_id;
-    need_to_create_stream_window_ = true;
-    return;
-  }
-
-  for (const auto& [_, connection] : recent_connections_) {
-    if (connection.remote_id == remote_id) {
-      ConnectTo(remote_id, connection.password.c_str(),
-                connection.remember_password);
-      return;
-    }
-  }
-  ConnectTo(remote_id, "", false);
+  // LAN-only build: device-id sessions are served by the signaling server and
+  // are no longer supported. Only "lan-" records and explicit LAN endpoints
+  // (request-lan-connection) can start a session.
+  ui_->main->set_connection_input_error(UiText(localization::Literal(
+      "仅支持局域网连接", localization_language_index_)));
 }
 
 void GuiApplication::SelectStreamTab(int index) {

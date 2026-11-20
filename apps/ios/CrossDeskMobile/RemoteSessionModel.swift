@@ -297,7 +297,8 @@ private final class RemoteAudioPlayer {
 }
 
 final class RemoteSessionModel: NSObject, ObservableObject, CrossDeskRTCBridgeDelegate {
-    static let officialSignalHost = "api.crossdesk.cn"
+    // LAN-only build: no public signaling host is configured by default.
+    static let officialSignalHost = ""
     static let officialSignalPort = "9099"
 
     private let privacyPreferences = PrivacyPreferences()
@@ -772,36 +773,6 @@ final class RemoteSessionModel: NSObject, ObservableObject, CrossDeskRTCBridgeDe
         guard hasNetworkConsent, isConnected, remoteHostInfoReceived,
               !remoteVersionCheckAttempted else { return }
         remoteVersionCheckAttempted = true
-        if remoteAppVersion.isEmpty {
-            remoteUpdateMessage = Self.remoteUpdateNotice
-            return
-        }
-        let generation = remoteVersionCheckGeneration
-        let appVersion = remoteAppVersion
-        // Only public release metadata is fetched; no peer ID or version is sent.
-        let url = URL(string: "https://version.crossdesk.cn/version.json")!
-        let request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData,
-                                 timeoutInterval: 15)
-        remoteVersionCheckTask = URLSession.shared.dataTask(with: request) {
-            [weak self] data, response, error in
-            let latest: String?
-            if error == nil, let data,
-               (response as? HTTPURLResponse)?.statusCode == 200 {
-                latest = CrossDeskRTCBridge.availableUpdate(appVersion: appVersion,
-                                                            releaseJSON: data)
-            } else {
-                latest = nil
-            }
-            DispatchQueue.main.async { [weak self] in
-                guard let self,
-                      self.remoteVersionCheckGeneration == generation,
-                      self.isConnected else { return }
-                self.remoteVersionCheckTask = nil
-                guard latest != nil else { return }
-                self.remoteUpdateMessage = Self.remoteUpdateNotice
-            }
-        }
-        remoteVersionCheckTask?.resume()
     }
 
     func savedPassword(for remoteID: String) -> String {

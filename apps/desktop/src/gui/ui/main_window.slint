@@ -42,7 +42,7 @@ export struct ReleaseNoteBlock {
 export enum UpdateCheckStatus { idle, checking, up-to-date, available, failed }
 export enum AutostartStatus { checking, enabled, disabled, unsupported, failed }
 enum CopyFeedback { idle, success, failed }
-enum SponsorPlatform { afdian, kofi, github }
+
 
 export global UiStrings {
     in-out property <string> window-minimize: "Minimize";
@@ -61,10 +61,6 @@ export global UiStrings {
     in-out property <string> connect: "Connect";
     in-out property <string> settings: "Settings";
     in-out property <string> about: "About";
-    in-out property <string> sponsorship-title: "Sponsorship";
-    in-out property <string> sponsorship-message;
-    in-out property <string> sponsorship-dismiss-hint;
-    in-out property <string> sponsor-via-afdian: "AFDIAN";
     in-out property <string> ok: "OK";
     in-out property <string> cancel: "Cancel";
     in-out property <string> save: "Save";
@@ -147,49 +143,6 @@ export global UiStrings {
     in-out property <string> self-hosted-settings: "Self-hosted server settings";
     in-out property <string> access-website: "Website: ";
     in-out property <string> release-date-label: "Release Date: ";
-}
-
-// Keep sponsor labels, order, and sizing consistent across dialogs.
-component SponsorshipSection inherits VerticalLayout {
-    in property <bool> show-title: true;
-    callback open-afdian;
-    callback open-kofi;
-    callback open-github;
-    vertical-stretch: 0;
-    spacing: 10px;
-    if root.show-title: Text {
-        text: UiStrings.sponsorship-title;
-        color: WorkbenchStyle.text; font-size: 12px; font-weight: 600;
-        wrap: word-wrap;
-    }
-    HorizontalLayout {
-        spacing: 8px;
-        for platform in (GalleryStrings.language == 0
-            ? [SponsorPlatform.afdian, SponsorPlatform.kofi, SponsorPlatform.github]
-            : [SponsorPlatform.kofi, SponsorPlatform.github, SponsorPlatform.afdian]): Rectangle {
-            // Size to the label, icon, and padding, then share extra row space.
-            min-width: sponsor-label-metrics.preferred-width + 56px;
-            preferred-width: self.min-width;
-            horizontal-stretch: 1;
-            height: 32px;
-            SettingsButton {
-                width: parent.width; height: parent.height;
-                icon: platform == SponsorPlatform.afdian ? @image-url("icons/sponsors/afdian.png")
-                    : platform == SponsorPlatform.kofi ? @image-url("icons/sponsors/kofi.png")
-                    : @image-url("icons/sponsors/github.svg");
-                text: platform == SponsorPlatform.afdian ? UiStrings.sponsor-via-afdian
-                    : platform == SponsorPlatform.kofi ? "Ko-fi" : "GitHub Sponsors";
-                sponsor-label-metrics := Text {
-                    visible: false; text: parent.text; font-size: 12px;
-                }
-                clicked => {
-                    if platform == SponsorPlatform.afdian { root.open-afdian(); }
-                    else if platform == SponsorPlatform.kofi { root.open-kofi(); }
-                    else { root.open-github(); }
-                }
-            }
-        }
-    }
 }
 
 // Prompt copy in modal dialogs sits slightly low in the legacy ImGui layout.
@@ -498,10 +451,6 @@ export component MainWindow inherits Window {
             root.lan-new-password = "";
             root.lan-message = "";
             lan-ip-picker.close-menu();
-            if root.lan-mode {
-                root.reset-password-open = false;
-                root.set-connection-mode(false);
-            }
         }
     }
     in-out property <bool> lan-open;
@@ -509,27 +458,21 @@ export component MainWindow inherits Window {
         if !root.lan-open { root.lan-access-password = ""; }
         if root.lan-open { root.gallery-action("release", ""); }
     }
-    in-out property <bool> lan-mode;
+    in-out property <bool> lan-mode: true;
     callback connection-mode-changed(bool);
     changed lan-mode => {
         root.recent-tooltip-visible = false;
         recent-scroll.viewport-x = 0px;
-        if !root.lan-mode {
-            root.lan-port-editing = false;
-            if root.lan-port-dirty && root.lan-endpoint-error == "" { root.lan-apply-pending = true; }
-        }
     }
-    private property <string> id-connection-draft;
     private property <string> ip-connection-draft;
     private property <bool> lan-password-visible: true;
-    private property <bool> active-password-visible: root.lan-mode ? root.lan-password-visible : root.password-visible;
-    private property <string> active-password: root.lan-mode ? root.lan-new-password : root.local-password;
+    private property <bool> active-password-visible: root.lan-password-visible;
+    private property <string> active-password: root.lan-new-password;
     function set-connection-mode(lan: bool) {
+        // LAN-only build: the connection mode is pinned to direct LAN.
         recent-group-filter.close-menu();
-        if root.lan-mode { root.ip-connection-draft = root.remote-id-input; }
-        else { root.id-connection-draft = root.remote-id-input; }
-        root.lan-mode = lan;
-        root.remote-id-input = root.lan-mode ? root.ip-connection-draft : root.id-connection-draft;
+        root.lan-mode = true;
+        root.remote-id-input = root.ip-connection-draft;
         root.connection-input-error = "";
         root.copy-feedback = CopyFeedback.idle;
         root.menu-open = false;
@@ -542,9 +485,7 @@ export component MainWindow inherits Window {
     }
     function submit-connection() {
         if root.connection-pending || root.lan-connecting { return; }
-        if root.lan-mode {
-            root.request-lan-connection(root.remote-id-input);
-        } else { root.connect-requested(root.remote-id-input); }
+        root.request-lan-connection(root.remote-id-input);
     }
     public function request-lan-connection(address: string) {
         if !root.ip-direct-enabled || root.connection-pending || root.lan-connecting || root.lan-open { return; }
@@ -582,7 +523,7 @@ export component MainWindow inherits Window {
         root.lan-access-warning = "";
         root.lan-access-warning-endpoint = "";
         // Keep the failed draft ready to edit and validate it on every new blur.
-        if root.lan-mode && root.lan-port-dirty && root.sponsorship-unobstructed {
+        if root.lan-mode && root.lan-port-dirty {
             lan-port-editor.focus();
         } else { focus-sink.focus(); }
     }
@@ -623,29 +564,25 @@ export component MainWindow inherits Window {
     callback lan-cancel-connect;
     callback lan-prepare-connect(string) -> string;
     callback lan-connect(string, string, string, bool);
-    private property <bool> prompt-password-required: root.lan-open || root.connection-password-required;
-    private property <bool> prompt-validating: root.lan-open ? root.lan-connecting : root.connection-validating;
-    private property <bool> prompt-pending: root.lan-open ? root.lan-connecting : root.connection-pending;
-    private property <string> prompt-status-text: !root.lan-open ? root.connection-status-text
-        : root.lan-connecting ? GalleryStrings.texts[56]
+    private property <bool> prompt-password-required: root.lan-open;
+    private property <bool> prompt-validating: root.lan-connecting;
+    private property <bool> prompt-pending: root.lan-connecting;
+    private property <string> prompt-status-text:
+        root.lan-connecting ? GalleryStrings.texts[56]
         : root.lan-retry-after > 0 ? GalleryStrings.retry-after(root.lan-retry-after)
         : root.lan-message == "InvalidCredentials" ? UiStrings.reinput-password
         : root.lan-message == "" || root.lan-message == "AuthenticationRateLimited" ? UiStrings.input-password
         : LanStrings.error-message(root.lan-message);
     function submit-connection-password() {
-        if root.lan-open {
-            if root.lan-connecting || root.lan-retry-after > 0 || root.lan-access-password.character-count != 6 { return; }
-            root.lan-connect(root.lan-remote-address, root.lan-remote-port, root.lan-access-password, root.lan-remember-password);
-            root.lan-access-password = "";
-        } else { root.connection-submit-password(root.connection-password, root.connection-remember-password); }
+        if root.lan-connecting || root.lan-retry-after > 0 || root.lan-access-password.character-count != 6 { return; }
+        root.lan-connect(root.lan-remote-address, root.lan-remote-port, root.lan-access-password, root.lan-remember-password);
+        root.lan-access-password = "";
     }
     function cancel-connection-prompt() {
-        if root.lan-open {
-            root.lan-cancel-connect();
-            root.lan-access-password = "";
-            root.lan-open = false;
-            focus-sink.focus();
-        } else { root.connection-cancel(); }
+        root.lan-cancel-connect();
+        root.lan-access-password = "";
+        root.lan-open = false;
+        focus-sink.focus();
     }
     in-out property <string> remote-id-input: "";
     in property <bool> password-visible: true;
@@ -803,10 +740,6 @@ export component MainWindow inherits Window {
     callback confirm-update;
     callback cancel-update;
     callback open-website;
-    callback open-afdian-sponsor;
-    callback open-github-sponsor;
-    callback open-kofi-sponsor;
-    callback dismiss-sponsorship;
     callback check-for-updates;
     callback signal-reconnect-requested;
     callback connection-cancel;
@@ -862,22 +795,6 @@ export component MainWindow inherits Window {
         else if root.about-page == AboutPage.component && root.about-component-index != 0 { root.about-page = AboutPage.components; }
         else { root.about-page = AboutPage.overview; }
     }
-    in-out property <bool> sponsorship-open: false;
-    // Automatic prompts must not interrupt another dialog or menu.
-    private property <bool> sponsorship-unobstructed: !root.gallery-mode
-        && !root.menu-open && !root.settings-open
-        && !root.self-host-settings-open && !root.about-open && !root.feedback-open
-        && !(root.update-open && root.update-available) && !root.messages-open
-        && !root.update-confirm-open
-        && !root.reset-password-open && !root.alias-open && !root.delete-open
-        && !root.disconnect-open
-        && !root.device-group-open && !root.connection-dialog-open && !root.lan-open
-        && !root.permission-dialog-open && !root.wayland-notice-open
-        && !root.portable-service-dialog-open
-        && !root.portable-service-suppressed-notice-open
-        && root.offline-warning == "" && root.lan-access-warning == "";
-    out property <bool> can-show-sponsorship: !root.sponsorship-open
-        && root.sponsorship-unobstructed;
     // Follow the first available update. Dismissing the dialog replaces this
     // binding, so background checks do not reopen it during this launch.
     in-out property <bool> update-open: root.update-available;
@@ -930,8 +847,7 @@ export component MainWindow inherits Window {
         triggered => {
             root.dialog-focus-pending = false;
             if root.settings-open || root.autostart-guide-open
-                || root.wayland-notice-open || root.messages-open || root.about-open || root.feedback-open
-                || (root.sponsorship-open && root.sponsorship-unobstructed) {
+                || root.wayland-notice-open || root.messages-open || root.about-open || root.feedback-open {
                 focus-sink.focus();
             }
         }
@@ -986,10 +902,6 @@ export component MainWindow inherits Window {
     changed about-page => {
         // Restore dialog shortcuts after leaving the selectable license text.
         if root.about-open { root.dialog-focus-pending = true; }
-    }
-
-    changed sponsorship-open => {
-        if root.sponsorship-open { root.dialog-focus-pending = true; }
     }
 
     reset-remote-id => {
@@ -1224,10 +1136,6 @@ export component MainWindow inherits Window {
                     }
                     return accept;
                 }
-                if root.sponsorship-open && root.sponsorship-unobstructed {
-                    if event.text == Key.Escape { root.dismiss-sponsorship(); }
-                    return accept;
-                }
                 if root.messages-open {
                     if event.text == Key.Escape { root.messages-open = false; }
                     return accept;
@@ -1259,51 +1167,11 @@ export component MainWindow inherits Window {
         }
 
         // A compact application toolbar keeps global actions outside device cards.
-        // Center the 28px buttons above the cards with 6px of space on each side.
-        connection-mode-switch := WorkbenchButton {
-            visible: !root.gallery-mode && root.ip-direct-enabled;
-            x: 20px; y: 6px;
-            width: 136px; height: 28px;
-            background: WorkbenchStyle.field-surface;
-            enabled: !root.connection-pending && !root.lan-connecting;
-            tooltip: root.lan-mode ? GalleryStrings.texts[63] : GalleryStrings.texts[64];
-            accessible-role: switch;
-            accessible-label: GalleryStrings.texts[65];
-            accessible-checked: root.lan-mode;
-            z: 8;
-            clicked => {
-                root.select-connection-mode(!root.lan-mode);
-                connection-mode-switch.focus();
-            }
-
-            Rectangle {
-                x: root.lan-mode ? parent.width / 2 + 1px : 2px;
-                y: 2px;
-                width: (parent.width - 6px) / 2;
-                height: parent.height - 4px;
-                border-radius: UiRadius.control;
-                background: WorkbenchStyle.accent;
-                animate x { duration: 180ms; easing: ease-in-out; }
-            }
-            for lan in [false, true]: Text {
-                x: lan ? parent.width / 2 + 1px : 2px;
-                y: 2px;
-                width: (parent.width - 6px) / 2;
-                height: parent.height - 4px;
-                text: lan ? GalleryStrings.texts[66] : GalleryStrings.texts[67];
-                font-size: 12px;
-                font-weight: 500;
-                color: root.lan-mode == lan ? white : WorkbenchStyle.muted;
-                horizontal-alignment: center;
-                vertical-alignment: center;
-                accessible-role: none;
-                animate color { duration: 180ms; }
-            }
-        }
+        // LAN-only build: there is no connection-mode switch to fall back to ID mode.
         open-gallery-button := WorkbenchButton {
             visible: !root.gallery-mode;
-            x: root.ip-direct-enabled ? connection-mode-switch.x + connection-mode-switch.width + 8px : 20px;
-            y: connection-mode-switch.y;
+            x: 20px;
+            y: 6px;
             width: 80px; height: 28px;
             normal-background: white;
             text: GalleryStrings.texts[54];
@@ -1399,8 +1267,8 @@ export component MainWindow inherits Window {
                 x: 0px; y: 0px;
                 width: (parent.width - 16px) / 2; height: parent.height;
                 Text { x: 16px; y: 14px; width: parent.width - 32px; height: 24px; overflow: elide; text: UiStrings.local-desktop; font-size: 16px; font-weight: 600; color: WorkbenchStyle.text; }
-                Text { x: 16px; y: 38px; width: parent.width - 32px; height: 18px; text: root.lan-mode ? GalleryStrings.texts[69] : GalleryStrings.texts[70]; font-size: 11px; color: WorkbenchStyle.muted; overflow: elide; }
-                local-address-label := Text { x: 16px; y: 68px; height: 18px; text: root.lan-mode ? GalleryStrings.texts[71] : UiStrings.local-id; font-size: 12px; color: WorkbenchStyle.muted; vertical-alignment: top; }
+                Text { x: 16px; y: 38px; width: parent.width - 32px; height: 18px; text: GalleryStrings.texts[69]; font-size: 11px; color: WorkbenchStyle.muted; overflow: elide; }
+                local-address-label := Text { x: 16px; y: 68px; height: 18px; text: GalleryStrings.texts[71]; font-size: 12px; color: WorkbenchStyle.muted; vertical-alignment: top; }
                 lan-switch-ip-metrics := Text {
                     visible: false; accessible-role: none;
                     text: GalleryStrings.texts[72];
@@ -1458,12 +1326,10 @@ export component MainWindow inherits Window {
                     // parent's stacking order above the following password row.
                     z: 1;
                     background: ControlStyle.input-surface; border-radius: UiRadius.control;
-                    outline-color: !root.lan-mode ? UiSurface.edge
-                        : root.lan-endpoint-error != "" ? UiSurface.error
+                    outline-color: root.lan-endpoint-error != "" ? UiSurface.error
                         : lan-ip-picker.has-focus || root.lan-port-editing ? UiSurface.focus
                         : UiSurface.edge;
                     animate outline-color { duration: 120ms; }
-                    if !root.lan-mode: Text { x: 12px; width: parent.width - 64px; height: parent.height; text: root.local-id; font-size: 24px; font-weight: 600; letter-spacing: 1px; overflow: elide; color: WorkbenchStyle.text; vertical-alignment: center; }
                     SurfaceSeparator { x: parent.width - 48px; y: 10px; width: 1px; height: parent.height - 20px; vertical: true; outline-color: UiSurface.separator; }
                     lan-ip-picker := GroupFilter {
                         visible: root.lan-mode;
@@ -1556,8 +1422,8 @@ export component MainWindow inherits Window {
                         x: parent.width - 42px; y: 2px; width: 36px; quiet: true;
                         icon: root.copy-feedback == CopyFeedback.success ? FontAwesomeIcons.check : FontAwesomeIcons.copy;
                         icon-color: root.copy-feedback == CopyFeedback.success ? WorkbenchStyle.success : WorkbenchStyle.muted;
-                        tooltip: root.lan-mode ? GalleryStrings.texts[76] : GalleryStrings.texts[77];
-                        enabled: !root.lan-mode || root.lan-listener-address != "";
+                        tooltip: GalleryStrings.texts[76];
+                        enabled: root.lan-listener-address != "";
                         tooltip-suppressed: root.copy-feedback != CopyFeedback.idle;
                         // Let other controls receive the original click; moving
                         // focus away from Copy dismisses its transient feedback.
@@ -1566,13 +1432,12 @@ export component MainWindow inherits Window {
                         }
                         clicked => {
                             if root.lan-mode && root.lan-port-dirty && !root.apply-lan-endpoint() { return; }
-                            let copied = root.lan-mode ? root.lan-copy-text(root.lan-listener-address) : root.copy-local-id();
+                            let copied = root.lan-copy-text(root.lan-listener-address);
                             root.copy-feedback = copied ? CopyFeedback.success : CopyFeedback.failed;
                             copy-timer.restart();
                         }
                     }
-                    private property <string> edit-hint: !root.lan-mode || !root.sponsorship-unobstructed
-                        || root.lan-password-pending ? ""
+                    private property <string> edit-hint: root.lan-password-pending ? ""
                         : lan-ip-picker.has-hover ? GalleryStrings.texts[78]
                         : lan-port-hover.has-hover && !lan-port-editor.has-focus ? GalleryStrings.texts[79] : "";
                     private property <bool> edit-hint-visible;
@@ -1607,28 +1472,21 @@ export component MainWindow inherits Window {
                         x: parent.width - 112px; y: 0px; width: 36px; quiet: true;
                         icon: root.active-password-visible ? FontAwesomeIcons.eye : FontAwesomeIcons.eye-slash;
                         tooltip: root.active-password-visible ? GalleryStrings.texts[80] : GalleryStrings.texts[81];
-                        clicked => { if root.lan-mode { root.lan-password-visible = !root.lan-password-visible; } else { root.toggle-password-visibility(); } }
+                        clicked => { root.lan-password-visible = !root.lan-password-visible; }
                     }
                     WorkbenchButton {
                         x: parent.width - 74px; y: 0px; width: 36px; quiet: true;
                         icon: FontAwesomeIcons.rotate; tooltip: UiStrings.refresh-password;
-                        enabled: root.lan-mode ? !root.lan-password-pending : !root.password-change-pending;
-                        clicked => { if root.lan-mode { root.lan-reset-password(); } else { root.refresh-password(); } }
-                    }
-                    WorkbenchButton {
-                        x: parent.width - 36px; y: 0px; width: 36px; quiet: true;
-                        icon: FontAwesomeIcons.pen;
-                        tooltip: GalleryStrings.texts[82];
-                        enabled: root.lan-mode ? !root.lan-password-pending : !root.password-change-pending;
-                        clicked => { root.reset-password-open = true; }
+                        enabled: !root.lan-password-pending;
+                        clicked => { root.lan-reset-password(); }
                     }
                 }
             }
             WorkbenchCard {
                 x: local-card.width + 16px; y: 0px; width: local-card.width; height: parent.height;
                 Text { x: 16px; y: 14px; width: parent.width - 32px; height: 24px; overflow: elide; text: UiStrings.remote-desktop; font-size: 16px; font-weight: 600; color: WorkbenchStyle.text; }
-                Text { x: 16px; y: 38px; width: parent.width - 32px; height: 18px; text: root.lan-mode ? GalleryStrings.texts[83] : GalleryStrings.texts[84]; font-size: 11px; color: WorkbenchStyle.muted; overflow: elide; }
-                Text { x: 16px; y: 68px; height: 18px; text: root.lan-mode ? GalleryStrings.texts[85] : UiStrings.remote-id; font-size: 12px; color: WorkbenchStyle.muted; }
+                Text { x: 16px; y: 38px; width: parent.width - 32px; height: 18px; text: GalleryStrings.texts[83]; font-size: 11px; color: WorkbenchStyle.muted; overflow: elide; }
+                Text { x: 16px; y: 68px; height: 18px; text: GalleryStrings.texts[85]; font-size: 12px; color: WorkbenchStyle.muted; }
                 FlatSurface {
                     x: 16px; y: 90px; width: parent.width - 32px; height: 40px;
                     background: remote-id-editor.has-focus ? ControlStyle.input-focused : ControlStyle.input-surface;
@@ -1638,14 +1496,14 @@ export component MainWindow inherits Window {
                     animate outline-color { duration: 120ms; }
                     if root.remote-id-input == "": Text {
                         x: 12px; width: parent.width - 24px; height: parent.height;
-                        text: root.lan-mode ? "192.168.1.20:52888" : GalleryStrings.texts[86];
+                        text: "192.168.1.20:52888";
                         font-size: 13px; color: ControlStyle.input-placeholder; vertical-alignment: center;
                     }
                     remote-id-editor := TextInput {
                         x: 12px; width: parent.width - 24px; height: parent.height;
-                        text <=> root.remote-id-input; font-size: root.lan-mode ? 18px : 24px; font-weight: 600; letter-spacing: root.lan-mode ? 0px : 1px;
-                        input-type: root.lan-mode ? InputType.text : InputType.number; color: WorkbenchStyle.text;
-                        accessible-label: root.lan-mode ? GalleryStrings.texts[85] : UiStrings.remote-id;
+                        text <=> root.remote-id-input; font-size: 18px; font-weight: 600;
+                        input-type: InputType.text; color: WorkbenchStyle.text;
+                        accessible-label: GalleryStrings.texts[85];
                         enabled: !root.connection-pending && !root.lan-connecting;
                         vertical-alignment: center;
                         selection-foreground-color: white; selection-background-color: WorkbenchStyle.accent;
@@ -1653,7 +1511,7 @@ export component MainWindow inherits Window {
                             root.connection-input-error = "";
                             // Enforce the digit limit before the next frame can
                             // render the text from typing, paste, or replacement.
-                            let formatted = root.lan-mode ? self.text : root.format-remote-id(self.text);
+                            let formatted = self.text;
                             self.text = formatted;
                             // Formatted IDs are ASCII, so these are UTF-8 offsets.
                             self.set-selection-offsets(
@@ -1665,7 +1523,7 @@ export component MainWindow inherits Window {
                 Text {
                     x: 16px; y: 133px; width: parent.width - 32px; height: 24px;
                     text: root.connection-input-error != "" ? root.connection-input-error
-                        : root.lan-mode ? GalleryStrings.texts[87] : "";
+                        : GalleryStrings.texts[87];
                     font-size: 11px; color: root.connection-input-error != "" ? #be3d42 : WorkbenchStyle.muted; wrap: word-wrap;
                 }
                 WorkbenchButton {
@@ -2046,7 +1904,7 @@ export component MainWindow inherits Window {
             }
             Rectangle {
                 x: 20px; y: 11px; width: 6px; height: 6px; border-radius: 3px;
-                background: root.lan-mode ? (root.lan-message != "" || root.lan-listener-error != "" ? #d6932b : root.lan-listening ? WorkbenchStyle.success : WorkbenchStyle.muted) : root.signal-tls-error || root.signal-reconnecting ? #d6932b : root.signal-connected ? WorkbenchStyle.success : #d65252;
+                background: root.lan-message != "" || root.lan-listener-error != "" ? #d6932b : root.lan-listening ? WorkbenchStyle.success : WorkbenchStyle.muted;
             }
             Text {
                     x: 34px;
@@ -2054,38 +1912,15 @@ export component MainWindow inherits Window {
                     height: parent.height;
                     width: parent.width - 160px;
                     overflow: elide;
-                    text: root.lan-mode ? (root.lan-message != "" ? LanStrings.error-message(root.lan-message) : root.lan-listener-error != "" ? (root.lan-listener-address == "" ? "" : root.lan-listener-address + " · ") + LanStrings.error-message(root.lan-listener-error) : root.lan-listening ? GalleryStrings.texts[97] : root.lan-password-pending ? GalleryStrings.texts[98] : GalleryStrings.texts[99])
-                          : root.signal-tls-error ? UiStrings.tls-error
-                          : root.signal-connected ? UiStrings.signal-connected
-                          : root.signal-reconnecting ? UiStrings.signal-reconnecting
-                          : UiStrings.signal-disconnected;
+                    text: root.lan-message != "" ? LanStrings.error-message(root.lan-message) : root.lan-listener-error != "" ? (root.lan-listener-address == "" ? "" : root.lan-listener-address + " · ") + LanStrings.error-message(root.lan-listener-error) : root.lan-listening ? GalleryStrings.texts[97] : root.lan-password-pending ? GalleryStrings.texts[98] : GalleryStrings.texts[99];
                     color: WorkbenchStyle.muted;
                     font-size: 11px;
                     vertical-alignment: center;
             }
-            if root.lan-mode || (root.signal-connected && !root.signal-tls-error): Text {
+            Text {
                 x: parent.width - self.preferred-width - 20px; height: parent.height;
                 text: root.current-version;
                 font-size: 11px; color: WorkbenchStyle.muted; vertical-alignment: center;
-            }
-            if !root.lan-mode && !root.signal-connected: WorkbenchButton {
-                x: parent.width - self.width - 20px;
-                y: (parent.height - self.height) / 2;
-                width: max(64px, reconnect-label-metrics.preferred-width + 22px);
-                height: 22px;
-                text: UiStrings.signal-reconnect;
-                text-size: 11px;
-                text-color: WorkbenchStyle.accent;
-                clicked => {
-                    root.copy-feedback = CopyFeedback.idle;
-                    root.signal-reconnect-requested();
-                }
-                reconnect-label-metrics := Text {
-                    visible: false;
-                    text: UiStrings.signal-reconnect;
-                    font-size: 11px;
-                    font-weight: 500;
-                }
             }
         }
     }
@@ -2411,7 +2246,7 @@ export component MainWindow inherits Window {
             loading: root.announcement-loading; failed: root.announcement-failed; loaded: root.announcement-loaded;
             read-save-failed: root.announcement-read-save-failed;
             delete-failed: root.announcement-delete-failed;
-            connected: root.signal-connected;
+            connected: false;
             selected-id: root.announcement-selected-id; selected-title: root.announcement-selected-title;
             selected-revision: root.announcement-selected-revision;
             selected-body: root.announcement-selected-body; selected-date: root.announcement-selected-date;
@@ -2439,54 +2274,8 @@ export component MainWindow inherits Window {
         icon: self.error ? FontAwesomeIcons.xmark : FontAwesomeIcons.check;
         text: self.error
             ? GalleryStrings.texts[102]
-            : root.lan-mode ? GalleryStrings.texts[103] : UiStrings.copied;
+            : GalleryStrings.texts[103];
         z: 30;
-    }
-
-    // Reset password modal.
-    if root.reset-password-open: Rectangle {
-        background: #00000042;
-        z: 40;
-        TouchArea { clicked => { focus-sink.focus(); } }
-        DialogSurface {
-            x: (parent.width - self.width) / 2;
-            y: (parent.height - self.height) / 2;
-            width: root.compact-language ? 260px : 320px;
-            height: reset-content.preferred-height;
-            reset-content := VerticalLayout {
-                padding: 24px;
-                spacing: 16px;
-                Text {
-                    text: UiStrings.new-password; color: WorkbenchStyle.text;
-                    font-size: 13px; font-weight: 500; wrap: word-wrap;
-                    min-height: 22px; vertical-alignment: center;
-                }
-                PasswordInput {
-                    width: parent.width - 48px; height: 38px; text-size: 16px;
-                    text <=> root.new-password-input;
-                    max-length: 6;
-                    error: root.reset-password-invalid;
-                }
-                if root.reset-password-invalid: Text {
-                    text: UiStrings.invalid-password; color: #b42318; font-size: 12px; wrap: word-wrap;
-                }
-                HorizontalLayout {
-                    spacing: 12px; height: 34px;
-                    PrimaryButton {
-                        text: UiStrings.ok; height: 34px; horizontal-stretch: 1;
-                        enabled: root.lan-mode ? !root.lan-password-pending : !root.password-change-pending;
-                        clicked => {
-                            if (root.reset-password(root.new-password-input)) {
-                                root.new-password-input = "";
-                                root.reset-password-invalid = false;
-                                root.reset-password-open = false;
-                            } else { root.reset-password-invalid = true; }
-                        }
-                    }
-                    SecondaryButton { text: UiStrings.cancel; height: 34px; horizontal-stretch: 1; clicked => { root.new-password-input = ""; root.reset-password-invalid = false; root.reset-password-open = false; } }
-                }
-            }
-        }
     }
 
     // One editor and one callback path for recent connections and DeskHub.
@@ -2684,14 +2473,7 @@ export component MainWindow inherits Window {
                 color: WorkbenchStyle.text; font-size: 14px;
                 wrap: word-wrap; horizontal-alignment: center; vertical-alignment: center;
             }
-            if !root.lan-open && root.connection-password-required && !root.connection-validating: PasswordInput {
-                x: (parent.width - self.width) / 2; y: connection-prompt-text.y + connection-prompt-text.height + 16px;
-                width: 164px; height: 36px; text-size: 16px;
-                border-radius: UiRadius.control;
-                text <=> root.connection-password;
-                accepted => { root.submit-connection-password(); }
-            }
-            if root.lan-open && !root.lan-connecting: PasswordInput {
+            if root.lan-open && root.prompt-password-required && !root.prompt-validating: PasswordInput {
                 x: (parent.width - self.width) / 2; y: connection-prompt-text.y + connection-prompt-text.height + 16px;
                 width: 164px; height: 36px; text-size: 16px; max-length: 6;
                 border-radius: UiRadius.control;
@@ -2701,8 +2483,7 @@ export component MainWindow inherits Window {
             if root.prompt-password-required && !root.prompt-validating: Rectangle {
                 x: (parent.width - self.width) / 2; y: connection-prompt-text.y + connection-prompt-text.height + 64px;
                 width: remember-label.preferred-width + 29px; height: 21px;
-                if root.lan-open: ImGuiCheckBox { x: 0px; y: 0px; checked <=> root.lan-remember-password; }
-                if !root.lan-open: ImGuiCheckBox { x: 0px; y: 0px; checked <=> root.connection-remember-password; }
+                if root.prompt-password-required: ImGuiCheckBox { x: 0px; y: 0px; checked <=> root.lan-remember-password; }
                 remember-label := Text {
                     x: 29px; height: parent.height;
                     text: UiStrings.remember-password;
@@ -2711,8 +2492,7 @@ export component MainWindow inherits Window {
                 TouchArea {
                     x: 29px; width: parent.width - 29px; height: parent.height;
                     clicked => {
-                        if root.lan-open { root.lan-remember-password = !root.lan-remember-password; }
-                        else { root.connection-remember-password = !root.connection-remember-password; }
+                        root.lan-remember-password = !root.lan-remember-password;
                     }
                 }
             }
@@ -2725,12 +2505,8 @@ export component MainWindow inherits Window {
                 }
                 if root.prompt-password-required && !root.prompt-validating: WorkbenchButton {
                     primary: true; text: UiStrings.ok;
-                    enabled: !root.lan-open || (root.lan-retry-after == 0 && root.lan-access-password.character-count == 6);
+                    enabled: root.lan-retry-after == 0 && root.lan-access-password.character-count == 6;
                     clicked => { root.submit-connection-password(); }
-                }
-                if !root.prompt-password-required && !root.prompt-pending: WorkbenchButton {
-                    primary: true; text: UiStrings.ok;
-                    clicked => { root.connection-acknowledge(); }
                 }
             }
         }
@@ -2964,51 +2740,24 @@ export component MainWindow inherits Window {
                             }
                         }
                         SettingsGroup {
-                            title: GalleryStrings.texts[116]; rows: 4;
+                            title: GalleryStrings.texts[116]; rows: 2;
                             SettingsToggleRow {
                                 label: GalleryStrings.texts[117];
                                 checked <=> root.ip-direct-enabled-draft;
                             }
                             SettingsToggleRow {
                                 label: GalleryStrings.texts[206];
-                                checked <=> root.lan-listen-all-draft;
+                                checked <=> root.lan-listen-all-draft; divider: false;
                                 enabled: root.ip-direct-enabled-draft;
-                            }
-                            SettingsToggleRow { label: UiStrings.force-relay; checked <=> root.force-relay-enabled; enabled: !root.settings-session-active; }
-                            SettingsToggleRow {
-                                label: UiStrings.self-hosted;
-                                label-reserve: self-host-edit.width + 84px;
-                                checked <=> root.self-hosted-enabled; enabled: !root.settings-session-active; divider: false;
-                                self-host-edit := SettingsButton {
-                                    x: parent.width - self.width - 60px; y: 4px;
-                                    width: self-host-edit-metrics.preferred-width + 24px; height: 28px;
-                                    text: GalleryStrings.texts[118];
-                                    enabled: !root.settings-session-active;
-                                    clicked => { root.self-host-settings-open = true; }
-                                    self-host-edit-metrics := Text {
-                                        visible: false; accessible-role: none;
-                                        text: parent.text; font-size: 12px;
-                                    }
-                                }
                             }
                         }
                         SettingsGroup {
                             title: GalleryStrings.texts[120];
-                            rows: 5 + (root.mac-permission-settings-visible ? 1 : 0)
+                            rows: 3 + (root.mac-permission-settings-visible ? 1 : 0)
                                 + (root.portable-service-settings-visible ? 1 : 0);
                             SettingsToggleRow { label: UiStrings.privacy-on-connect; checked <=> root.privacy-on-connect-enabled; enabled: root.privacy-setting-available; }
                             SettingsToggleRow { label: UiStrings.privacy-local-unlock; checked <=> root.privacy-local-unlock-allowed; enabled: root.privacy-setting-available; }
                             SettingsToggleRow { label: UiStrings.lock-on-disconnect; checked <=> root.lock-on-disconnect-enabled; enabled: root.lock-on-disconnect-available; }
-                            SettingsToggleRow { label: TrustStrings.only; checked <=> root.trusted-devices-only; }
-                            SettingsRow {
-                                label: TrustStrings.title; divider: root.mac-permission-settings-visible || root.portable-service-settings-visible;
-                                SettingsButton {
-                                    x: parent.width - self.width - 12px; y: 4px;
-                                    width: max(104px, self.label-width); height: 28px;
-                                    text: TrustStrings.manage;
-                                    clicked => { root.trusted-devices-open = true; root.trust-action("open", "", ""); }
-                                }
-                            }
                             if root.mac-permission-settings-visible: SettingsRow {
                                 label: UiStrings.system-permissions; divider: false;
                                 SettingsButton {
@@ -3163,106 +2912,6 @@ export component MainWindow inherits Window {
         }
     }
 
-    if root.trusted-devices-open: TrustedDevicesDialog {
-        z: 51;
-        devices: root.trusted-devices;
-        candidates: root.trust-candidates;
-        local-fingerprint: root.device-fingerprint;
-        error: root.trusted-devices-error;
-        notice: root.trusted-devices-notice;
-        copy-error: root.trust-copy-error;
-        copy-notice: root.trust-copy-notice;
-        pairing-input <=> root.trust-pairing-input;
-        close => { root.trust-action("close", "", ""); root.trusted-devices-open = false; }
-        action(action, id, key) => { root.trust-action(action, id, key); }
-    }
-
-    if root.self-host-settings-open: Rectangle {
-        background: #15223835;
-        z: 49;
-        TouchArea { clicked => { focus-sink.focus(); } }
-        DialogSurface {
-            x: (parent.width - self.width) / 2;
-            y: (parent.height - self.height) / 2;
-            width: 360px; height: root.self-host-settings-error == "" ? 266px : 322px;
-            border-radius: UiRadius.surface; outline-color: UiSurface.edge; background: #f8fafc;
-            TouchArea { clicked => { focus-sink.focus(); } }
-            Text {
-                x: 18px; y: 18px; width: parent.width - 36px; height: 24px;
-                text: UiStrings.self-hosted-settings; font-size: 16px; font-weight: 600; color: #22324a;
-            }
-            Text { x: 18px; y: 56px; width: parent.width - 36px; height: 20px; text: UiStrings.server-host; color: #34445a; font-size: 12px; overflow: elide; vertical-alignment: center; }
-            RoundedLineEdit {
-                x: 18px; y: 80px; width: parent.width - 36px; height: 30px;
-                surrounding-background: #f8fafc;
-                normal-outline-color: UiSurface.edge;
-                text <=> root.server-host;
-            }
-            Text { x: 18px; y: 120px; width: parent.width - 36px; height: 20px; text: UiStrings.server-port; color: #34445a; font-size: 12px; overflow: elide; vertical-alignment: center; }
-            RoundedLineEdit {
-                x: 18px; y: 144px; width: parent.width - 36px; height: 30px;
-                surrounding-background: #f8fafc;
-                normal-outline-color: UiSurface.edge;
-                text <=> root.server-port; input-type: InputType.number;
-            }
-            if root.self-host-settings-error != "": Text {
-                x: 18px; y: 186px; width: parent.width - 36px; height: 48px;
-                text: root.self-host-settings-error; color: #c53e3e; font-size: 11px; wrap: word-wrap;
-            }
-            SurfaceSeparator { x: 18px; y: parent.height - 66px; width: parent.width - 36px; height: 1px; outline-color: UiSurface.separator; }
-            SettingsButton { x: parent.width - 114px; y: parent.height - 50px; width: 92px; primary: true; text: UiStrings.ok; clicked => { if root.save-self-hosted-settings() { root.self-host-settings-open = false; } } }
-            SettingsButton { x: parent.width - 124px - self.width; y: parent.height - 50px; width: max(80px, self.label-width); text: UiStrings.cancel; clicked => { root.cancel-self-hosted-settings(); root.self-host-settings-open = false; } }
-        }
-    }
-
-    if root.sponsorship-open && root.sponsorship-unobstructed: Rectangle {
-        background: #15223850;
-        z: 38;
-        TouchArea { clicked => { focus-sink.focus(); } }
-        SettingsDialog {
-            x: (parent.width - self.width) / 2;
-            y: (parent.height - self.height) / 2;
-            width: min(480px, parent.width - 40px);
-            height: self.content-top + sponsorship-content.preferred-height + 24px;
-            title: UiStrings.sponsorship-title;
-            show-close-button: false;
-            sponsorship-content := VerticalLayout {
-                x: 24px; y: parent.content-top;
-                width: parent.width - 48px; height: self.preferred-height;
-                padding: 0px; spacing: 20px;
-                Text {
-                    text: UiStrings.sponsorship-message;
-                    color: WorkbenchStyle.text; font-size: 14px; wrap: word-wrap;
-                    // Match message bodies' 1.5em line height for wrapped text.
-                    font-family: "CrossDesk Message Spacing";
-                }
-                SponsorshipSection {
-                    show-title: false;
-                    open-afdian => { root.open-afdian-sponsor(); }
-                    open-kofi => { root.open-kofi-sponsor(); }
-                    open-github => { root.open-github-sponsor(); }
-                }
-                Text {
-                    text: UiStrings.sponsorship-dismiss-hint;
-                    color: WorkbenchStyle.muted; font-size: 12px; wrap: word-wrap;
-                    font-family: "CrossDesk Message Spacing";
-                }
-                SurfaceSeparator { height: 1px; outline-color: UiSurface.separator; }
-                HorizontalLayout {
-                    alignment: end;
-                    SettingsButton {
-                        width: max(80px, sponsorship-close-metrics.preferred-width + 24px);
-                        primary: true; text: MessageStrings.close;
-                        clicked => { root.dismiss-sponsorship(); }
-                        sponsorship-close-metrics := Text {
-                            visible: false; text: MessageStrings.close; font-size: 12px;
-                        }
-                    }
-                }
-            }
-        }
-    }
-
     if root.about-open: Rectangle {
         // Use the same bounds throughout the About navigation stack.
         private property <length> dialog-width: min(480px, self.width - 40px);
@@ -3374,11 +3023,6 @@ export component MainWindow inherits Window {
                             }
                         }
                     }
-                    SponsorshipSection {
-                        open-afdian => { root.open-afdian-sponsor(); }
-                        open-kofi => { root.open-kofi-sponsor(); }
-                        open-github => { root.open-github-sponsor(); }
-                    }
                     VerticalLayout {
                         spacing: 5px;
                         Text { text: UiStrings.copyright; color: WorkbenchStyle.muted; font-size: 11px; wrap: word-wrap; }
@@ -3480,19 +3124,6 @@ export component MainWindow inherits Window {
                             vertical-alignment: center;
                         }
                         Rectangle { horizontal-stretch: 1; }
-                        Rectangle {
-                            width: update-website-label.preferred-width;
-                            accessible-role: button;
-                            accessible-label: update-website-label.text;
-                            accessible-action-default => { root.open-website(); }
-                            update-website-label := Text {
-                                text: UiStrings.access-website + "https://crossdesk.cn";
-                                color: website-touch.has-hover ? #254cc0 : WorkbenchStyle.accent;
-                                font-size: 13px;
-                                vertical-alignment: center;
-                            }
-                            website-touch := TouchArea { mouse-cursor: pointer; clicked => { root.open-website(); } }
-                        }
                     }
                 }
 
@@ -3545,12 +3176,6 @@ export component MainWindow inherits Window {
                             }
                         }
                     }
-                }
-
-                SponsorshipSection {
-                    open-afdian => { root.open-afdian-sponsor(); }
-                    open-kofi => { root.open-kofi-sponsor(); }
-                    open-github => { root.open-github-sponsor(); }
                 }
 
                 VerticalLayout {

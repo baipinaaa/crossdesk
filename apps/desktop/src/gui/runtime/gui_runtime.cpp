@@ -193,6 +193,13 @@ bool GuiRuntime::PublishSharedIdentity(bool include_config) {
 }
 
 int GuiRuntime::CreateConnectionPeer() {
+  // LAN-only build: no signaling server is ever contacted. The managed peer
+  // used for device-id sessions therefore does not exist, so neither the
+  // public server (api.crossdesk.cn) nor a self-hosted signaling server is
+  // reachable from this application. LAN sessions create their own direct
+  // peer in InitializeLan()/ConnectLan() and are unaffected.
+  return -1;
+#if 0
   // Tick retries after the old peer's leave notification and socket shutdown.
   if (connection_peer_cleanup_.valid()) return 0;
   {
@@ -410,6 +417,7 @@ int GuiRuntime::CreateConnectionPeer() {
   } else {
     return -1;
   }
+#endif
 }
 
 void GuiRuntime::HandleRecentConnections() {

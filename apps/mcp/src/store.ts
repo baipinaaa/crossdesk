@@ -43,7 +43,7 @@ const configSchema = z.strictObject({
   version: z.literal(1),
   panel: panel.default("auto"),
   video: videoOptions.prefault({}),
-  server: host.default("api.crossdesk.cn"),
+  server: host,
   port: z.int().min(1).max(65535).default(9099),
   devices: z.array(deviceSchema).max(256),
 });
