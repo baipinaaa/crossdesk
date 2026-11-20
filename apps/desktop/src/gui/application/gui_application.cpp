@@ -1432,7 +1432,11 @@ void GuiApplication::InitializeUi() {
           ui_->video_scheduler.Notifier()), std::memory_order_release);
 #endif
 #if _WIN32
-  ui_->main->set_custom_titlebar(true);
+  // A frameless window makes winit report a client area whose origin differs
+  // from the rendered surface by the custom titlebar height, which offsets
+  // every hit test (and the window buttons) by 31px. The system frame keeps
+  // the client area and the Slint surface identical, so input stays aligned.
+  ui_->main->set_custom_titlebar(false);
 #elif (defined(__linux__) && !defined(__OHOS__))
   ui_->main->set_custom_titlebar(use_x11_custom_titlebar_);
   ui_->main->set_wayland_titlebar(use_xwayland_gui_);
