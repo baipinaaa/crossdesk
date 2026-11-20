@@ -373,21 +373,4 @@ jobs:
           files: release/*
           generate_release_notes: false
           body_path: ${{ runner.temp }}/release-notes.md
-
-      - name: Create or update 'latest' tag
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -f latest
-          git push origin latest --force
-
-      - name: Upload to GitHub Release (latest)
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: latest
-          name: Latest Release
-          draft: false
-          prerelease: false
-          files: release/*
-          generate_release_notes: false
-          body_path: ${{ runner.temp }}/release-notes.md
+          make_latest: true
